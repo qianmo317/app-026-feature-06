@@ -1,18 +1,25 @@
 import { useState } from 'react'
 import { Link, navigate } from '../router'
 import { useScript } from '../state/hooks'
-import { parseScriptText } from '../engine/parse'
+import { previewScriptText, type ScriptPreview } from '../engine/parse'
 import { makeCue, cueLabel } from '../engine/cues'
 import { MARK_DEFS, KIND_LABELS } from '../constants'
 import * as repo from '../storage/repo'
-import type { Cue, Line } from '../types'
+import type { Cue, Line, Segment } from '../types'
+import { PastePreview, type PasteMode } from '../components/PastePreview'
 import { Play, Maximize, Printer, Save, Layers, StickyNote } from 'lucide-react'
+
+interface PreviewState {
+  mode: PasteMode
+  preview: ScriptPreview
+}
 
 export function ScriptEditor({ id }: { id: string }) {
   const { script, mutate, saved, saveNow } = useScript(id)
   const [paste, setPaste] = useState('')
   const [autoBlank, setAutoBlank] = useState(true)
   const [showCards, setShowCards] = useState(false)
+  const [preview, setPreview] = useState<PreviewState | null>(null)
 
   if (!script) return <div className="page center">加载中…</div>
 
@@ -22,13 +29,28 @@ export function ScriptEditor({ id }: { id: string }) {
     for (const lid of seg.lineIds) segOfLine.set(lid, si)
   })
 
-  const doParse = (mode: 'replace' | 'append') => {
-    const parsed = parseScriptText(paste, { autoSegmentOnBlank: autoBlank })
-    mutate((s) => {
-      if (mode === 'replace') return { ...s, lines: parsed.lines, segments: parsed.segments }
-      // 解析出的 id 已全局唯一，可直接追加
-      return { ...s, lines: [...s.lines, ...parsed.lines], segments: [...s.segments, ...parsed.segments] }
+  /** 先解析出预览（含逐行诊断），确认前不动正文 */
+  const openPreview = (mode: PasteMode) => {
+    const result = previewScriptText(paste, {
+      autoSegmentOnBlank: autoBlank,
+      autoSegmentStart: mode === 'append' ? script.segments.length + 1 : 1,
     })
+    setPreview({ mode, preview: result })
+  }
+
+  /** 预览确认后才写入 */
+  const confirmPreview = (lines: Line[], segments: Segment[]) => {
+    const mode = preview?.mode ?? 'replace'
+    mutate((s) => {
+      if (mode === 'replace') return { ...s, lines, segments }
+      // 追加：沿用当前文稿的最后一段；解析出的 id 全局唯一，可直接拼接
+      const lastSeg = s.segments[s.segments.length - 1]
+      if (lastSeg && lastSeg.lineIds.length === 0) {
+        return { ...s, lines: [...s.lines, ...lines], segments: [...s.segments.slice(0, -1), ...segments] }
+      }
+      return { ...s, lines: [...s.lines, ...lines], segments: [...s.segments, ...segments] }
+    })
+    setPreview(null)
     setPaste('')
   }
 
@@ -191,8 +213,8 @@ export function ScriptEditor({ id }: { id: string }) {
             <input type="checkbox" checked={autoBlank} onChange={(e) => setAutoBlank(e.target.checked)} />
             空行自动分段
           </label>
-          <button className="btn" data-testid="btn-parse-replace" disabled={!paste.trim()} onClick={() => doParse('replace')}>解析并替换全篇</button>
-          <button className="btn" data-testid="btn-parse-append" disabled={!paste.trim()} onClick={() => doParse('append')}>追加到末尾</button>
+          <button className="btn" data-testid="btn-parse-replace" disabled={!paste.trim()} onClick={() => openPreview('replace')}>预览后替换全篇</button>
+          <button className="btn" data-testid="btn-parse-append" disabled={!paste.trim()} onClick={() => openPreview('append')}>预览后追加</button>
         </div>
       </section>
 
@@ -295,6 +317,22 @@ export function ScriptEditor({ id }: { id: string }) {
         <button className="btn" onClick={async () => { await saveNow(); navigate('/') }}>返回首页</button>
         <Save size={14} className="muted" />
       </footer>
+
+      {preview && (
+        <PastePreview
+          mode={preview.mode}
+          preview={preview.preview}
+          appendAfter={
+            preview.mode === 'append'
+              ? script.segments.length
+                ? { index: script.segments.length - 1, title: script.segments[script.segments.length - 1].title }
+                : null
+              : null
+          }
+          onConfirm={confirmPreview}
+          onCancel={() => setPreview(null)}
+        />
+      )}
     </div>
   )
 }

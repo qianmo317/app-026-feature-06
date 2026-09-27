@@ -232,6 +232,36 @@ input[type='number'] { width: 56px; padding: 2px 4px; }
 .modal { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.5); display: grid; place-items: center; z-index: 60; }
 .modal-box { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 20px; max-width: 520px; width: 92%; max-height: 80vh; overflow: auto; }
 .modal-box h3 { margin-top: 0; }
+.modal-wide { max-width: 860px; }
+
+/* ============ 粘贴导入预览 ============ */
+.pv-summary { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.pv-summary strong { font-size: 15px; }
+.pv-bad { color: var(--danger); font-size: 13px; }
+.pv-tag { border: 1px solid; border-radius: 999px; padding: 1px 10px; font-size: 12px; white-space: nowrap; }
+.pv-anchor { font-size: 13px; margin: 6px 0 10px; padding: 8px 10px; background: var(--hl); border-radius: 8px; }
+.pv-body { border: 1px solid var(--border); border-radius: 10px; max-height: 46vh; overflow: auto; }
+.pv-seg-head {
+  position: sticky; top: 0; z-index: 1;
+  padding: 6px 10px; font-size: 13px; font-weight: 700;
+  background: var(--hl); border-bottom: 1px solid var(--border);
+}
+.pv-row { display: flex; gap: 10px; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+.pv-row.has-issue { background: color-mix(in srgb, var(--danger) 7%, transparent); box-shadow: inset 3px 0 0 var(--danger); }
+.pv-no { color: var(--muted); font-size: 12px; width: 26px; flex: none; text-align: right; padding-top: 8px; }
+.pv-main { flex: 1; min-width: 0; }
+.pv-line { display: flex; gap: 8px; align-items: baseline; }
+.pv-role { width: 84px; flex: none; padding: 4px 8px; }
+.pv-text { flex: 1; min-width: 0; line-height: 1.6; }
+.pv-cues { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.cue-chip.cue-warn { border-color: var(--danger); color: var(--danger); }
+.pv-issue { font-size: 12px; line-height: 1.7; margin-top: 4px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.pv-badge { border: 1px solid; border-radius: 4px; padding: 0 6px; font-size: 11px; white-space: nowrap; }
+.pv-fix { display: inline-flex; align-items: center; gap: 4px; }
+.pv-fix input { width: 64px; }
+.pv-foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+.pv-foot > div { display: flex; gap: 8px; }
+.pv-foot .btn-danger { background: transparent; color: var(--danger); border-color: var(--danger); }
 
 /* ============ 演出模式 ============ */
 .stage-root { position: fixed; inset: 0; background: var(--bg); z-index: 40; }
