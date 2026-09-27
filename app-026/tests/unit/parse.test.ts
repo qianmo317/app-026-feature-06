@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseScriptText, parseContentLine } from '../../src/engine/parse'
+import { parseScriptText, parseContentLine, previewScriptText } from '../../src/engine/parse'
 import { lineHoldSeconds } from '../../src/engine/cues'
 
 describe('「角色：唱词」解析', () => {
@@ -70,5 +70,84 @@ describe('唱段切分', () => {
     const { lines, segments } = parseScriptText('生：A\n\n旦：B\n生：C')
     const all = segments.flatMap((s) => s.lineIds)
     expect(all.slice().sort()).toEqual(lines.map((l) => l.id).slice().sort())
+  })
+})
+
+describe('粘贴预览：问题逐行标出', () => {
+  it('全部正常时不计问题', () => {
+    const pv = previewScriptText('生：第一句【过门5】\n旦：第二句【锣鼓】')
+    expect(pv.segmentCount).toBe(1)
+    expect(pv.lineCount).toBe(2)
+    expect(pv.issueCount).toBe(0)
+    expect(pv.issueLineCount).toBe(0)
+  })
+
+  it('角色前缀超过六个字单独标出', () => {
+    const pv = previewScriptText('幕后合唱念白员：这一句前缀太长')
+    expect(pv.counts.longRole).toBe(1)
+    expect(pv.lines[0].line.role).toBeUndefined()
+    expect(pv.lines[0].issues[0].type).toBe('longRole')
+    expect(pv.lines[0].issues[0].reason).toContain('超过六个字')
+  })
+
+  it('括号不配对标出，并给出两边个数', () => {
+    const pv = previewScriptText('生：唱一句【过门5】再唱【锣鼓')
+    expect(pv.counts.unbalancedBrackets).toBe(1)
+    const iss = pv.lines[0].issues.find((i) => i.type === 'unbalancedBrackets')
+    expect(iss?.reason).toContain('【 有 2 个')
+    expect(iss?.reason).toContain('】 有 1 个')
+  })
+
+  it('秒数写 0 标出并提示默认值，cue 仍有秒数可改', () => {
+    const pv = previewScriptText('生：唱【过门0】')
+    expect(pv.counts.zeroSeconds).toBe(1)
+    const iss = pv.lines[0].issues.find((i) => i.type === 'zeroSeconds')
+    expect(iss?.cueId).toBeTruthy()
+    expect(iss?.reason).toContain('默认 4 秒')
+    const cue = pv.lines[0].line.cues.find((c) => c.id === iss!.cueId)
+    expect(cue?.seconds).toBe(4)
+  })
+
+  it('秒数不是数字标出：从唱词摘除并补默认秒数', () => {
+    const pv = previewScriptText('生：唱【停顿五秒】收')
+    expect(pv.counts.badSeconds).toBe(1)
+    expect(pv.lines[0].line.text).toBe('唱 收')
+    const cue = pv.lines[0].line.cues[0]
+    expect(cue).toMatchObject({ kind: 'pause', seconds: 2 })
+    expect(pv.lines[0].issues[0].cueId).toBe(cue.id)
+  })
+
+  it('一行多个问题同时标出', () => {
+    const pv = previewScriptText('超长角色名带很多字啊：唱【过门0】【停顿abc】【多的括号')
+    const types = pv.lines[0].issues.map((i) => i.type).sort()
+    expect(types).toEqual(['badSeconds', 'longRole', 'unbalancedBrackets', 'zeroSeconds'])
+  })
+
+  it('统计段数/句数，并标出哪些行落在同一段', () => {
+    const pv = previewScriptText('## 起\n生：A\n生：B\n\n旦：C')
+    expect(pv.segmentCount).toBe(2)
+    expect(pv.lineCount).toBe(3)
+    expect(pv.segments.map((s) => s.lineIds.length)).toEqual([2, 1])
+    expect(pv.lines[0].segId).toBe(pv.lines[1].segId)
+    expect(pv.lines[2].segId).not.toBe(pv.lines[0].segId)
+    expect(pv.lines.map((l) => l.globalNo)).toEqual([1, 2, 3])
+    expect(pv.lines[2].raw).toBe('旦：C')
+  })
+
+  it('段头后直接空行的空段标出', () => {
+    const pv = previewScriptText('## 只有标题\n\n生：A')
+    expect(pv.segments[0].empty).toBe(true)
+    expect(pv.segments[1].empty).toBe(false)
+  })
+
+  it('预览与实际解析产出一致（除 id 外内容相同）', () => {
+    const raw = '生：A【过门3】\n\n旦：B'
+    const parsed = parseScriptText(raw)
+    const pv = previewScriptText(raw)
+    // 两次解析各自生成 id，只比对结构内容，保证预览所见即写入所得
+    expect(pv.lines.map((l) => ({ role: l.line.role, text: l.line.text, cues: l.line.cues.length }))).toEqual(
+      parsed.lines.map((l) => ({ role: l.role, text: l.text, cues: l.cues.length })),
+    )
+    expect(pv.segments.map((s) => s.lineIds.length)).toEqual(parsed.segments.map((s) => s.lineIds.length))
   })
 })

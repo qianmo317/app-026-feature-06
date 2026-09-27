@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import { Link, navigate } from '../router'
 import { useScript } from '../state/hooks'
-import { parseScriptText } from '../engine/parse'
 import { makeCue, cueLabel } from '../engine/cues'
 import { MARK_DEFS, KIND_LABELS } from '../constants'
+import { PastePreview, type PasteMode } from '../components/PastePreview'
 import * as repo from '../storage/repo'
-import type { Cue, Line } from '../types'
+import type { Cue, Line, Segment } from '../types'
 import { Play, Maximize, Printer, Save, Layers, StickyNote } from 'lucide-react'
 
 export function ScriptEditor({ id }: { id: string }) {
@@ -13,6 +13,7 @@ export function ScriptEditor({ id }: { id: string }) {
   const [paste, setPaste] = useState('')
   const [autoBlank, setAutoBlank] = useState(true)
   const [showCards, setShowCards] = useState(false)
+  const [preview, setPreview] = useState<{ raw: string; mode: PasteMode } | null>(null)
 
   if (!script) return <div className="page center">加载中…</div>
 
@@ -22,13 +23,19 @@ export function ScriptEditor({ id }: { id: string }) {
     for (const lid of seg.lineIds) segOfLine.set(lid, si)
   })
 
-  const doParse = (mode: 'replace' | 'append') => {
-    const parsed = parseScriptText(paste, { autoSegmentOnBlank: autoBlank })
+  /** 只生成预览，不动现有文稿；确认后由 commitPreview 写入 */
+  const openPreview = (mode: PasteMode) => {
+    if (!paste.trim()) return
+    setPreview({ raw: paste, mode })
+  }
+
+  const commitPreview = (mode: PasteMode, lines: Line[], segments: Segment[]) => {
     mutate((s) => {
-      if (mode === 'replace') return { ...s, lines: parsed.lines, segments: parsed.segments }
-      // 解析出的 id 已全局唯一，可直接追加
-      return { ...s, lines: [...s.lines, ...parsed.lines], segments: [...s.segments, ...parsed.segments] }
+      if (mode === 'replace') return { ...s, lines, segments }
+      // 预览生成的 id 全局唯一，可直接追加
+      return { ...s, lines: [...s.lines, ...lines], segments: [...s.segments, ...segments] }
     })
+    setPreview(null)
     setPaste('')
   }
 
@@ -191,10 +198,24 @@ export function ScriptEditor({ id }: { id: string }) {
             <input type="checkbox" checked={autoBlank} onChange={(e) => setAutoBlank(e.target.checked)} />
             空行自动分段
           </label>
-          <button className="btn" data-testid="btn-parse-replace" disabled={!paste.trim()} onClick={() => doParse('replace')}>解析并替换全篇</button>
-          <button className="btn" data-testid="btn-parse-append" disabled={!paste.trim()} onClick={() => doParse('append')}>追加到末尾</button>
+          <button className="btn" data-testid="btn-parse-replace" disabled={!paste.trim()} onClick={() => openPreview('replace')}>预览：替换全篇</button>
+          <button className="btn" data-testid="btn-parse-append" disabled={!paste.trim()} onClick={() => openPreview('append')}>预览：追加到末尾</button>
         </div>
+        <p className="muted pv-tip">先出预览：逐行确认角色、唱词、识别到的提示与秒数，改过没问题再写入；确认前不会动现有文稿。</p>
       </section>
+
+      {preview && (
+        <PastePreview
+          raw={preview.raw}
+          autoBlank={autoBlank}
+          initialMode={preview.mode}
+          existingSegmentCount={script.segments.length}
+          existingLineCount={script.lines.length}
+          lastSegmentTitle={script.segments.at(-1)?.title}
+          onClose={() => setPreview(null)}
+          onCommit={commitPreview}
+        />
+      )}
 
       <section className="panel">
         <h2>唱段与唱词 {`(${script.lines.length} 行)`}</h2>
